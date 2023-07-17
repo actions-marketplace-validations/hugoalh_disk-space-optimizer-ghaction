@@ -44,7 +44,7 @@ runs:
   using: "composite"
   steps:
     - name: "Setup PowerShell Toolkit"
-      uses: "hugoalh-studio/setup-powershell-toolkit-ghaction@v1.2.3"
+      uses: "hugoalh-studio/setup-powershell-toolkit-ghaction@v1.4.0"
     - name: "Optimize Disk Space"
       env:
         INPUT_INPUT_LISTDELIMITER: "${{inputs.input_listdelimiter}}"
