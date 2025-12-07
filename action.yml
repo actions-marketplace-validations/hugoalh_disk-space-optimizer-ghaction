@@ -1,64 +1,155 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-action.json
 name: "Disk Space Optimizer"
 author: "hugoalh"
-description: "Optimize disk space for GitHub hosted runner."
+description: "Optimize the disk space for the GitHub hosted GitHub Actions runner."
 inputs:
-  input_listdelimiter:
-    description: "{RegEx} Delimiter when the input is type of list."
+  operate_async:
+    description: "{Boolean} Whether to operate in asynchronously, possibly reduce the operation duration."
     required: false
-    default: ",|;|\\r?\\n"
+    default: "False"
+  operate_sudo:
+    description: "{Boolean} Whether to execute this action in sudo mode in order to able operate protected resources on the non-Windows environment."
+    required: false
+    default: "False"
   general_include:
-    description: "{RegEx[]} Remove general item."
+    description: "{RegEx[]} Remove items which listed in the list."
     required: false
     default: ""
   general_exclude:
-    description: "{RegEx[]} Exclude remove general item."
+    description: "{RegEx[]} Exclude remove items which listed in the list."
     required: false
     default: ""
-  aptcache:
-    description: "{Boolean} Whether to remove Linux APT (Advanced Packaging Tools) cache."
+  docker_include:
+    description: "{RegEx[]} Remove Docker images."
+    required: false
+    default: ""
+  docker_exclude:
+    description: "{RegEx[]} Exclude remove Docker images."
+    required: false
+    default: ""
+  docker_prune:
+    description: "{Boolean} Whether to prune Docker all of the dangling images."
     required: false
     default: "False"
-  dockerimage_include:
-    description: "{RegEx[]} Remove Docker image."
-    required: false
-    default: ""
-  dockerimage_exclude:
-    description: "{RegEx[]} Exclude remove Docker image."
-    required: false
-    default: ""
-  swap:
-    description: "{Boolean} Whether to remove Linux Swap Space."
+  docker_clean:
+    description: "{Boolean} Whether to remove Docker cache."
     required: false
     default: "False"
-  general:
-    description: "{RegEx[]} Remove general item."
+  apt_enable:
+    description: "{Boolean} Whether to optimize via APT."
     required: false
-    default: ""
-    deprecationMessage: "Use `general_include`!"
-  dockerimage:
-    description: "{RegEx[]} Remove Docker image."
+    default: "False"
+  apt_prune:
+    description: "{Boolean} Whether to prune APT package."
     required: false
-    default: ""
-    deprecationMessage: "Use `dockerimage_include`!"
+    default: "False"
+  apt_clean:
+    description: "{Boolean} Whether to remove APT cache."
+    required: false
+    default: "False"
+  chocolatey_enable:
+    description: "{Boolean} Whether to optimize via Chocolatey."
+    required: false
+    default: "False"
+  homebrew_enable:
+    description: "{Boolean} Whether to optimize via Homebrew."
+    required: false
+    default: "False"
+  homebrew_prune:
+    description: "{Boolean} Whether to prune Homebrew package."
+    required: false
+    default: "False"
+  homebrew_clean:
+    description: "{Boolean} Whether to remove Homebrew cache."
+    required: false
+    default: "False"
+  npm_enable:
+    description: "{Boolean} Whether to optimize via NPM."
+    required: false
+    default: "False"
+  npm_prune:
+    description: "{Boolean} Whether to prune NPM package."
+    required: false
+    default: "False"
+  npm_clean:
+    description: "{Boolean} Whether to remove NPM cache."
+    required: false
+    default: "False"
+  pipx_enable:
+    description: "{Boolean} Whether to optimize via Pipx."
+    required: false
+    default: "False"
+  wmic_enable:
+    description: "{Boolean} Whether to optimize via WMIC."
+    required: false
+    default: "False"
+  fs_enable:
+    description: "{Boolean} Whether to optimize via file system."
+    required: false
+    default: "False"
+  os_swap:
+    description: "{Boolean} Whether to remove system page/swap file."
+    required: false
+    default: "False"
 runs:
   using: "composite"
   steps:
     - name: "Setup PowerShell Toolkit"
-      uses: "hugoalh-studio/setup-powershell-toolkit-ghaction@v1.2.3"
-    - name: "Optimize Disk Space"
-      env:
-        INPUT_INPUT_LISTDELIMITER: "${{inputs.input_listdelimiter}}"
-        INPUT_GENERAL: "${{inputs.general}}"
-        INPUT_GENERAL_INCLUDE: "${{inputs.general_include}}"
-        INPUT_GENERAL_EXCLUDE: "${{inputs.general_exclude}}"
-        INPUT_APTCACHE: "${{inputs.aptcache}}"
-        INPUT_DOCKERIMAGE: "${{inputs.dockerimage}}"
-        INPUT_DOCKERIMAGE_INCLUDE: "${{inputs.dockerimage_include}}"
-        INPUT_DOCKERIMAGE_EXCLUDE: "${{inputs.dockerimage_exclude}}"
-        INPUT_SWAP: "${{inputs.swap}}"
+      uses: "hugoalh-studio/setup-powershell-toolkit-ghaction@v2.0"
+      with:
+        sudo: "${{inputs.operate_sudo}}"
+        version: "~2.1.0"
+        scope: "${{(inputs.operate_sudo == 'True' && 'AllUsers') || 'CurrentUser'}}"
+      continue-on-error: true
+    - name: "Main"
       run: |
-        pwsh -NonInteractive (Join-Path -Path $Env:GITHUB_ACTION_PATH -ChildPath 'main.ps1')
+        #Requires -PSEdition Core -Version 7.2
+        $Script:ErrorActionPreference = 'Stop'
+        Get-Alias -Scope 'Local' -ErrorAction 'SilentlyContinue' |
+          Remove-Alias -Scope 'Local' -Force -ErrorAction 'SilentlyContinue'
+        Import-Module -Name 'hugoalh.GitHubActionsToolkit' -Scope 'Local'
+        Test-GitHubActionsEnvironment -Mandatory
+        [String]$MainScriptPath = Join-Path -Path $Env:GITHUB_ACTION_PATH -ChildPath 'main.ps1'
+        If (!(Test-Path -LiteralPath $MainScriptPath -PathType 'Leaf')) {
+          Write-GitHubActionsFail -Message 'Invalid script path!'
+        }
+        [Boolean]$InputOperateSudo = [Boolean]::Parse($Env:INPUT_OPERATE_SUDO)
+        If ($InputOperateSudo -and $Env:RUNNER_OS -iin @('Linux', 'MacOS')) {
+          sudo --non-interactive --preserve-env pwsh -NonInteractive $MainScriptPath
+        }
+        Else {
+          pwsh -NonInteractive $MainScriptPath
+        }
       shell: "pwsh"
+      env:
+        INPUT_APT_CLEAN: "${{inputs.apt_clean}}"
+        INPUT_APT_ENABLE: "${{inputs.apt_enable}}"
+        INPUT_APT_PRUNE: "${{inputs.apt_prune}}"
+        INPUT_CHOCOLATEY_ENABLE: "${{inputs.chocolatey_enable}}"
+        INPUT_DOCKER_CLEAN: "${{inputs.docker_clean}}"
+        INPUT_DOCKER_EXCLUDE: "${{inputs.docker_exclude}}"
+        INPUT_DOCKER_INCLUDE: "${{inputs.docker_include}}"
+        INPUT_DOCKER_PRUNE: "${{inputs.docker_prune}}"
+        INPUT_FS_ENABLE: "${{inputs.fs_enable}}"
+        INPUT_GENERAL_EXCLUDE: "${{inputs.general_exclude}}"
+        INPUT_GENERAL_INCLUDE: "${{inputs.general_include}}"
+        INPUT_HOMEBREW_CLEAN: "${{inputs.homebrew_clean}}"
+        INPUT_HOMEBREW_ENABLE: "${{inputs.homebrew_enable}}"
+        INPUT_HOMEBREW_PRUNE: "${{inputs.homebrew_prune}}"
+        INPUT_NPM_CLEAN: "${{inputs.npm_clean}}"
+        INPUT_NPM_ENABLE: "${{inputs.npm_enable}}"
+        INPUT_NPM_PRUNE: "${{inputs.npm_prune}}"
+        INPUT_OPERATE_ASYNC: "${{inputs.operate_async}}"
+        INPUT_OPERATE_SUDO: "${{inputs.operate_sudo}}"
+        INPUT_OS_SWAP: "${{inputs.os_swap}}"
+        INPUT_PIPX_ENABLE: "${{inputs.pipx_enable}}"
+        INPUT_WMIC_ENABLE: "${{inputs.wmic_enable}}"
+      continue-on-error: true
+    - name: "Setup PowerShell Toolkit"
+      uses: "hugoalh-studio/setup-powershell-toolkit-ghaction@v2.0"
+      with:
+        sudo: "${{inputs.operate_sudo}}"
+        version: "False"
       continue-on-error: true
 branding:
   icon: "hard-drive"

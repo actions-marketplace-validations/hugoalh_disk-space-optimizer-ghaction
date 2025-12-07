@@ -1,8 +1,6 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: "Scan Virus"
 on:
-  push:
-    branches:
-      - "**"
   pull_request:
     branches:
       - "**"
@@ -11,11 +9,14 @@ on:
       - "opened"
       - "reopened"
       - "synchronize"
+  push:
+    branches:
+      - "**"
   workflow_dispatch:
     inputs:
       git_integrate:
         type: "choice"
-        description: "{Boolean} Whether to integrate with Git to perform scan by the commits."
+        description: "{Boolean} Whether to integrate with Git to perform scan by every commits."
         required: false
         default: "False"
         options:
@@ -23,7 +24,7 @@ on:
           - "True"
       git_limit:
         type: "string"
-        description: "{UInt} Limit on how many Git commits will scan."
+        description: "{UInt64} Limit on how many Git commits will scan."
         required: false
         default: "0"
       git_reverse:
@@ -36,9 +37,18 @@ on:
           - "True"
 jobs:
   main:
-    name: "Main"
-    uses: "hugoalh/hugoalh/.github/workflows/scan-virus.yml@main"
-    with:
-      git_integrate: "${{github.event.inputs.git_integrate || 'False'}}"
-      git_limit: "${{github.event.inputs.git_limit || '0'}}"
-      git_reverse: "${{github.event.inputs.git_reverse || 'False'}}"
+    if: "${{!(github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.event.pull_request.base.repo.id)}}"
+    permissions:
+      contents: "read"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checkout Repository"
+        uses: "actions/checkout@v5"
+        with:
+          fetch-depth: "0"
+      - name: "Scan Repository"
+        uses: "hugoalh/scan-virus-ghaction/clamav@v0.20.1"
+        with:
+          git_integrate: "${{inputs.git_integrate || 'False'}}"
+          git_limit: "${{inputs.git_limit || '0'}}"
+          git_reverse: "${{inputs.git_reverse || 'False'}}"
